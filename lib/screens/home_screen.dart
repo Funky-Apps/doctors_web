@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:excel/excel.dart'; // Import the excel package
+import 'package:excel/excel.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:html' as html;
+import 'package:docx_template/docx_template.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,26 +18,36 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String? selectedDoctorId;
-  String? selectedDoctorName;
-
+  String? doctorId;
+  String? doctorName;
   late Future<List<Map<String, dynamic>>> submissionsFuture;
 
-  @override
-  void initState() {
-    super.initState();
-    selectedDoctorId = null;
-    selectedDoctorName = null;
+  final TextEditingController _idController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  Future<void> _loginDoctor() async {
+    String enteredId = _idController.text.trim();
+    String enteredPassword = _passwordController.text.trim();
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('doctors')
+        .where('uid', isEqualTo: enteredId)
+        .where('password', isEqualTo: enteredPassword)
+        .get();
+
+    if (snapshot.docs.isNotEmpty) {
+      setState(() {
+        doctorId = enteredId;
+        doctorName = snapshot.docs.first['name'];
+        submissionsFuture = _fetchSubmissions(doctorId!);
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Invalid ID or Password')),
+      );
+    }
   }
 
-  // Fetch doctors
-  Future<List<Map<String, dynamic>>> _fetchDoctors() async {
-    final snapshot =
-        await FirebaseFirestore.instance.collection('doctors').get();
-    return snapshot.docs.map((doc) => doc.data()).toList();
-  }
-
-  // Fetch submissions for selected doctor
   Future<List<Map<String, dynamic>>> _fetchSubmissions(String doctorId) async {
     final snapshot = await FirebaseFirestore.instance
         .collection('submissions')
@@ -44,205 +57,158 @@ class _HomeScreenState extends State<HomeScreen> {
     return snapshot.docs.map((doc) => doc.data()).toList();
   }
 
-  // Generate Excel for web
   Future<void> _generateExcel(List<Map<String, dynamic>> submissions) async {
-    try {
-      var excel = Excel.createExcel(); // Create new Excel instance
-      Sheet sheet = excel['Sheet1']; // Create sheet in Excel
+    var excel = Excel.createExcel();
+    Sheet sheet = excel['Sheet1'];
 
-      // Add headers
+    sheet.appendRow([
+      TextCellValue('Patient Name'),
+      TextCellValue('DOB'),
+      TextCellValue('Email'),
+      TextCellValue('Phone Number'),
+      TextCellValue('Address'),
+      TextCellValue('Emergency Contact'),
+      TextCellValue('Gender'),
+      TextCellValue('Conditions'),
+      TextCellValue('Medications'),
+      TextCellValue('Surgeries'),
+      TextCellValue('Allergies'),
+      TextCellValue('Submitted At'),
+    ]);
+
+    for (var submission in submissions) {
       sheet.appendRow([
-        TextCellValue('Patient Name'),
-        TextCellValue('Age'),
-        TextCellValue('Phone Number'),
-        TextCellValue('Do You Have Allergies'),
-        TextCellValue('Do You Have Chronic Diseases'),
-        TextCellValue('Do You Smoke'),
-        TextCellValue('Do You Have High Blood Pressure'),
-        TextCellValue('Have You Had Any Surgeries'),
-        TextCellValue('Submitted At'),
+        TextCellValue(submission['patient_name'] ?? 'Unknown'),
+        TextCellValue(submission['dob'] ?? 'N/A'),
+        TextCellValue(submission['email'] ?? 'N/A'),
+        TextCellValue(submission['phone_number'] ?? 'N/A'),
+        TextCellValue(submission['address'] ?? 'N/A'),
+        TextCellValue(submission['emergency_contact'] ?? 'N/A'),
+        TextCellValue(submission['gender'] ?? 'N/A'),
+        TextCellValue(submission['conditions'] ?? 'N/A'),
+        TextCellValue(submission['medication'] ?? 'N/A'),
+        TextCellValue(submission['surgeries'] ?? 'N/A'),
+        TextCellValue(submission['allergies'] ?? 'N/A'),
+        TextCellValue(submission['submitted_at'] != null
+            ? DateFormat('dd/MM/yyyy').format(submission['submitted_at'].toDate())
+            : 'N/A'),
       ]);
+    }
 
-      // Add submission data
-      for (var submission in submissions) {
-        sheet.appendRow([
-          TextCellValue(submission['patient_name'] ?? 'Unknown'),
-          TextCellValue(submission['age']?.toString() ?? 'N/A'),
-          TextCellValue(submission['phone_number'] ?? 'N/A'),
-          TextCellValue(submission['do_you_have_allergies'] ?? 'N/A'),
-          TextCellValue(submission['do_you_have_chronic_diseases'] ?? 'N/A'),
-          TextCellValue(submission['do_you_smoke'] ?? 'N/A'),
-          TextCellValue(submission['do_you_have_high_blood_pressure'] ?? 'N/A'),
-          TextCellValue(submission['have_you_had_any_surgeries'] ?? 'N/A'),
-          TextCellValue(submission['submitted_at'] != null
-              ? DateFormat('dd/MM/yyyy')
-                  .format(submission['submitted_at'].toDate())
-              : 'N/A'),
-        ]);
-      }
+    final excelBytes = await excel.encode();
 
-      // Encode Excel content
-      final excelBytes = await excel.encode();
-
-      if (kIsWeb) {
-        // Web - trigger download of the Excel file
-        final blob = html.Blob([
-          excelBytes
-        ], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.AnchorElement(href: url)
-          ..target = 'blank'
-          ..download = 'submission.xlsx'
-          ..click();
-        html.Url.revokeObjectUrl(url);
-      } else {
-        // Mobile/Desktop (Android/iOS or macOS/Windows) - save Excel to the file system
-        final output = await getTemporaryDirectory();
-        final file = File('${output.path}/submission.xlsx');
-        await file.writeAsBytes(excelBytes!);
-      }
-    } catch (e) {
-      print('Error generating or downloading the file: $e');
+    if (kIsWeb) {
+      final blob = html.Blob([Uint8List.fromList(excelBytes!)],
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', 'submissions.xlsx')
+        ..click();
+      html.Url.revokeObjectUrl(url);
     }
   }
+
+  // Future<void> _generateWord(List<Map<String, dynamic>> submissions) async {
+  //   try {
+  //     final ByteData data = await rootBundle.load('assets/template.docx');
+  //     final Uint8List bytes = data.buffer.asUint8List();
+  //     final docx = await DocxTemplate.fromBytes(bytes);
+  //
+  //     final content = Content();
+  //     final list = submissions.map((submission) {
+  //       return RowContent()
+  //         ..add(PlainTextContent("patient_name", submission['patient_name'] ?? 'Unknown'))
+  //         ..add(PlainTextContent("dob", submission['dob'] ?? 'N/A'))
+  //         ..add(PlainTextContent("email", submission['email'] ?? 'N/A'))
+  //         ..add(PlainTextContent("phone_number", submission['phone_number'] ?? 'N/A'))
+  //         ..add(PlainTextContent("address", submission['address'] ?? 'N/A'))
+  //         ..add(PlainTextContent("emergency_contact", submission['emergency_contact'] ?? 'N/A'))
+  //         ..add(PlainTextContent("gender", submission['gender'] ?? 'N/A'))
+  //         ..add(PlainTextContent("conditions", submission['conditions'] ?? 'N/A'))
+  //         ..add(PlainTextContent("medication", submission['medication'] ?? 'N/A'))
+  //         ..add(PlainTextContent("surgeries", submission['surgeries'] ?? 'N/A'))
+  //         ..add(PlainTextContent("allergies", submission['allergies'] ?? 'N/A'))
+  //         ..add(PlainTextContent("submitted_at",
+  //             submission['submitted_at'] != null
+  //                 ? DateFormat('dd/MM/yyyy').format(submission['submitted_at'].toDate())
+  //                 : 'N/A'));
+  //     }).toList();
+  //
+  //     content.add(TableContent("table", list));
+  //
+  //     final docGenerated = await docx.generate(content);
+  //     if (docGenerated != null) {
+  //       if (kIsWeb) {
+  //         final blob = html.Blob([docGenerated], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  //         final url = html.Url.createObjectUrlFromBlob(blob);
+  //         final anchor = html.AnchorElement(href: url)
+  //           ..setAttribute('download', 'submissions.docx')
+  //           ..click();
+  //         html.Url.revokeObjectUrl(url);
+  //       } else {
+  //         final outputDir = await getTemporaryDirectory();
+  //         final filePath = '${outputDir.path}/submissions.docx';
+  //         final file = File(filePath);
+  //         await file.writeAsBytes(docGenerated);
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(content: Text('File saved to $filePath')),
+  //         );
+  //       }
+  //     }
+  //   } catch (e) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Error generating Word file: $e')),
+  //     );
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.lightBlue.shade100,
-        title: Text(
-          selectedDoctorId == null || selectedDoctorName == null
-              ? 'Please select a doctor'
-              : 'ID: $selectedDoctorId Name: $selectedDoctorName',
+        title: Text(doctorId == null ? 'Doctor Login' : '$doctorName'),
+      ),
+      body: doctorId == null
+          ? Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextField(controller: _idController, decoration: InputDecoration(labelText: 'Doctor ID')),
+            TextField(controller: _passwordController, decoration: InputDecoration(labelText: 'Password'), obscureText: true),
+            SizedBox(height: 20),
+            ElevatedButton(onPressed: _loginDoctor, child: Text('Login')),
+          ],
         ),
-        actions: [
-          FutureBuilder<List<Map<String, dynamic>>>(
-            // Fetch doctors list
-            future: _fetchDoctors(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator());
-              }
-
-              if (snapshot.hasError) {
-                return IconButton(
-                  icon: Icon(Icons.error),
-                  onPressed: () {},
-                );
-              }
-
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return IconButton(
-                  icon: Icon(Icons.error),
-                  onPressed: () {},
-                );
-              }
-
-              final doctors = snapshot.data!;
-
-              return PopupMenuButton<String>(
-                onSelected: (value) {
-                  setState(() {
-                    selectedDoctorId = value;
-                    selectedDoctorName = doctors
-                        .firstWhere((doctor) => doctor['uid'] == value)['name'];
-
-                    // Fetch the submissions when a doctor is selected
-                    submissionsFuture = _fetchSubmissions(selectedDoctorId!);
-                  });
-                },
-                itemBuilder: (BuildContext context) {
-                  return doctors.map((doctor) {
-                    return PopupMenuItem<String>(
-                      value: doctor['uid'],
-                      child: Text(doctor['name']),
-                    );
-                  }).toList();
-                },
+      )
+          : FutureBuilder<List<Map<String, dynamic>>>(
+        future: submissionsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return Center(child: Text('No submissions found.'));
+          }
+          return ListView.builder(
+            itemCount: snapshot.data!.length,
+            itemBuilder: (context, index) {
+              final submission = snapshot.data![index];
+              return ListTile(
+                title: Text(submission['patient_name'] ?? 'Unknown Patient'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(icon: Icon(Icons.download), onPressed: () => _generateExcel([submission])),
+                    // IconButton(icon: Icon(Icons.file_copy), onPressed: () => _generateWord([submission]))
+                  ],
+                ),
               );
             },
-          ),
-        ],
+          );
+        },
       ),
-      body: selectedDoctorId == null
-          ? Center(child: Text('Please select a doctor'))
-          : FutureBuilder<List<Map<String, dynamic>>>(
-              // Fetch submissions
-              future: submissionsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(child: Text('No submissions found.'));
-                }
-
-                final submissions = snapshot.data!;
-
-                return ListView.builder(
-                  itemCount: submissions.length,
-                  itemBuilder: (context, index) {
-                    final submission = submissions[index];
-                    return Column(
-                      children: [
-                        Card(
-                          color: Colors.white,
-                          child: ListTile(
-                            title: Text(submission['patient_name'] ?? 'Unknown Patient'),
-                            subtitle: Text(
-                              'Age: ${submission['age']}, Phone: ${submission['phone_number']}',
-                            ),
-                            trailing: IconButton(
-                              icon: Icon(Icons.download),
-                              onPressed: () => _generateExcel([submission]),
-                            ),
-                            onTap: () {
-                              showDialog(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return AlertDialog(
-                                    title: Text('Submission Details'),
-                                    content: SingleChildScrollView(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('Patient Name: ${submission['patient_name']}'),
-                                          Text('Age: ${submission['age']}'),
-                                          Text('Phone Number: ${submission['phone_number']}'),
-                                          Text('Do You Have Allergies: ${submission['do_you_have_allergies']}'),
-                                          Text('Do You Have Chronic Diseases: ${submission['do_you_have_chronic_diseases']}'),
-                                          Text('Do You Smoke: ${submission['do_you_smoke']}'),
-                                          Text('Do You Have High Blood Pressure: ${submission['do_you_have_high_blood_pressure']}'),
-                                          Text('Have You Had Any Surgeries: ${submission['have_you_had_any_surgeries']}'),
-                                          Text('Submitted At: ${submission['submitted_at'] != null ? DateFormat('dd/MM/yyyy').format(submission['submitted_at'].toDate()) : 'N/A'}'),
-                                        ],
-                                      ),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: Text('Close'),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                        Divider(),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
     );
   }
 }
