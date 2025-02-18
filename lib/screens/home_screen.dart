@@ -1,14 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:doctors_web/core/widgets/round_button.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:excel/excel.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:html' as html;
-import 'package:docx_template/docx_template.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+
+import '../core/constants/constants.dart';
+import '../widgets/text_field_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -57,158 +58,152 @@ class _HomeScreenState extends State<HomeScreen> {
     return snapshot.docs.map((doc) => doc.data()).toList();
   }
 
-  Future<void> _generateExcel(List<Map<String, dynamic>> submissions) async {
-    var excel = Excel.createExcel();
-    Sheet sheet = excel['Sheet1'];
+  Future<void> _generatePDF(List<Map<String, dynamic>> submissions) async {
+    final pdf = pw.Document();
 
-    sheet.appendRow([
-      TextCellValue('Patient Name'),
-      TextCellValue('DOB'),
-      TextCellValue('Email'),
-      TextCellValue('Phone Number'),
-      TextCellValue('Address'),
-      TextCellValue('Emergency Contact'),
-      TextCellValue('Gender'),
-      TextCellValue('Conditions'),
-      TextCellValue('Medications'),
-      TextCellValue('Surgeries'),
-      TextCellValue('Allergies'),
-      TextCellValue('Submitted At'),
-    ]);
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('Patient Submissions',
+                  style: pw.TextStyle(
+                      fontSize: 20, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 10),
+              for (var submission in submissions)
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Name: ${submission['patient_name'] ?? 'Unknown'}'),
+                    pw.Text('DOB: ${submission['dob'] ?? 'N/A'}'),
+                    pw.Text('Email: ${submission['email'] ?? 'N/A'}'),
+                    pw.Text('Phone: ${submission['phone_number'] ?? 'N/A'}'),
+                    pw.Text('Address: ${submission['address'] ?? 'N/A'}'),
+                    pw.Text(
+                        'Emergency Contact: ${submission['emergency_contact'] ?? 'N/A'}'),
+                    pw.Text('Gender: ${submission['gender'] ?? 'N/A'}'),
+                    pw.Text(
+                        'Conditions: ${submission['conditions'].join(', ') ?? 'N/A'}'),
+                    pw.Text(
+                        'Medications: ${submission['medication'] ?? 'N/A'}'),
+                    pw.Text('Surgeries: ${submission['surgeries'] ?? 'N/A'}'),
+                    pw.Text('Allergies: ${submission['allergies'] ?? 'N/A'}'),
+                    pw.Text(
+                        'Symptoms: ${submission['symptoms'].join(', ') ?? 'N/A'}'),
+                    pw.Text('Pain Level: ${submission['pain_level'] ?? 'N/A'}'),
+                    pw.Text('Travel: ${submission['travel'] ?? 'N/A'}'),
+                    pw.Text(
+                        'Contact with Sick Person: ${submission['contact_with_sick_person'] ?? 'N/A'}'),
+                    pw.Text('Smoke: ${submission['smoke'] ?? 'N/A'}'),
+                    pw.Text('Alcohol: ${submission['alcohol'] ?? 'N/A'}'),
+                    pw.Text('Exercise: ${submission['exercise'] ?? 'N/A'}'),
+                    pw.Text('Sleep: ${submission['sleep'] ?? 'N/A'}'),
+                    pw.Text(
+                        'Dietary Preferences: ${submission['dietary_preferences'] ?? 'N/A'}'),
+                    pw.Text(
+                        'Additional Concerns: ${submission['additional_concerns'] ?? 'N/A'}'),
+                    pw.Text(
+                        'Submitted At: ${submission['submitted_at'] != null ? DateFormat('dd/MM/yyyy').format(submission['submitted_at'].toDate()) : 'N/A'}'),
+                    pw.Divider(),
+                  ],
+                )
+            ],
+          );
+        },
+      ),
+    );
 
-    for (var submission in submissions) {
-      sheet.appendRow([
-        TextCellValue(submission['patient_name'] ?? 'Unknown'),
-        TextCellValue(submission['dob'] ?? 'N/A'),
-        TextCellValue(submission['email'] ?? 'N/A'),
-        TextCellValue(submission['phone_number'] ?? 'N/A'),
-        TextCellValue(submission['address'] ?? 'N/A'),
-        TextCellValue(submission['emergency_contact'] ?? 'N/A'),
-        TextCellValue(submission['gender'] ?? 'N/A'),
-        TextCellValue(submission['conditions'] ?? 'N/A'),
-        TextCellValue(submission['medication'] ?? 'N/A'),
-        TextCellValue(submission['surgeries'] ?? 'N/A'),
-        TextCellValue(submission['allergies'] ?? 'N/A'),
-        TextCellValue(submission['submitted_at'] != null
-            ? DateFormat('dd/MM/yyyy').format(submission['submitted_at'].toDate())
-            : 'N/A'),
-      ]);
-    }
-
-    final excelBytes = await excel.encode();
-
-    if (kIsWeb) {
-      final blob = html.Blob([Uint8List.fromList(excelBytes!)],
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.AnchorElement(href: url)
-        ..setAttribute('download', 'submissions.xlsx')
-        ..click();
-      html.Url.revokeObjectUrl(url);
-    }
+    final pdfBytes = await pdf.save();
+    final blob = html.Blob([Uint8List.fromList(pdfBytes)], 'application/pdf');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.AnchorElement(href: url)
+      ..setAttribute('download', 'submissions.pdf')
+      ..click();
+    html.Url.revokeObjectUrl(url);
   }
-
-  // Future<void> _generateWord(List<Map<String, dynamic>> submissions) async {
-  //   try {
-  //     final ByteData data = await rootBundle.load('assets/template.docx');
-  //     final Uint8List bytes = data.buffer.asUint8List();
-  //     final docx = await DocxTemplate.fromBytes(bytes);
-  //
-  //     final content = Content();
-  //     final list = submissions.map((submission) {
-  //       return RowContent()
-  //         ..add(PlainTextContent("patient_name", submission['patient_name'] ?? 'Unknown'))
-  //         ..add(PlainTextContent("dob", submission['dob'] ?? 'N/A'))
-  //         ..add(PlainTextContent("email", submission['email'] ?? 'N/A'))
-  //         ..add(PlainTextContent("phone_number", submission['phone_number'] ?? 'N/A'))
-  //         ..add(PlainTextContent("address", submission['address'] ?? 'N/A'))
-  //         ..add(PlainTextContent("emergency_contact", submission['emergency_contact'] ?? 'N/A'))
-  //         ..add(PlainTextContent("gender", submission['gender'] ?? 'N/A'))
-  //         ..add(PlainTextContent("conditions", submission['conditions'] ?? 'N/A'))
-  //         ..add(PlainTextContent("medication", submission['medication'] ?? 'N/A'))
-  //         ..add(PlainTextContent("surgeries", submission['surgeries'] ?? 'N/A'))
-  //         ..add(PlainTextContent("allergies", submission['allergies'] ?? 'N/A'))
-  //         ..add(PlainTextContent("submitted_at",
-  //             submission['submitted_at'] != null
-  //                 ? DateFormat('dd/MM/yyyy').format(submission['submitted_at'].toDate())
-  //                 : 'N/A'));
-  //     }).toList();
-  //
-  //     content.add(TableContent("table", list));
-  //
-  //     final docGenerated = await docx.generate(content);
-  //     if (docGenerated != null) {
-  //       if (kIsWeb) {
-  //         final blob = html.Blob([docGenerated], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-  //         final url = html.Url.createObjectUrlFromBlob(blob);
-  //         final anchor = html.AnchorElement(href: url)
-  //           ..setAttribute('download', 'submissions.docx')
-  //           ..click();
-  //         html.Url.revokeObjectUrl(url);
-  //       } else {
-  //         final outputDir = await getTemporaryDirectory();
-  //         final filePath = '${outputDir.path}/submissions.docx';
-  //         final file = File(filePath);
-  //         await file.writeAsBytes(docGenerated);
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           SnackBar(content: Text('File saved to $filePath')),
-  //         );
-  //       }
-  //     }
-  //   } catch (e) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text('Error generating Word file: $e')),
-  //     );
-  //   }
-  // }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         backgroundColor: Colors.lightBlue.shade100,
-        title: Text(doctorId == null ? 'Doctor Login' : '$doctorName'),
+        title: Text(doctorId == null ? 'Doctor Login' : 'Submissions for $doctorName'),
       ),
       body: doctorId == null
-          ? Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            TextField(controller: _idController, decoration: InputDecoration(labelText: 'Doctor ID')),
-            TextField(controller: _passwordController, decoration: InputDecoration(labelText: 'Password'), obscureText: true),
-            SizedBox(height: 20),
-            ElevatedButton(onPressed: _loginDoctor, child: Text('Login')),
-          ],
-        ),
-      )
+          ? Container(
+              margin: EdgeInsets.all(25),
+              padding: EdgeInsets.all(25),
+              decoration: BoxDecoration(color: Colors.white),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset(Constants.appLogo, width: 300),
+                  SizedBox(height: 20),
+                  TextFieldWidget(
+                    controller: _idController,
+                    label: 'Doctor ID',
+                    hint: 'Enter your ID',
+                  ),
+                  SizedBox(height: 10),
+                  SizedBox(height: 10),
+                  TextFieldWidget(
+                      controller: _passwordController,
+                    label: 'Password',
+                    hint: 'Enter your password',
+                      ),
+                  SizedBox(height: 20),
+                  RoundButton(onPressed: _loginDoctor, label: 'Login'),
+                ],
+              ),
+            )
           : FutureBuilder<List<Map<String, dynamic>>>(
-        future: submissionsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text('No submissions found.'));
-          }
-          return ListView.builder(
-            itemCount: snapshot.data!.length,
-            itemBuilder: (context, index) {
-              final submission = snapshot.data![index];
-              return ListTile(
-                title: Text(submission['patient_name'] ?? 'Unknown Patient'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(icon: Icon(Icons.download), onPressed: () => _generateExcel([submission])),
-                    // IconButton(icon: Icon(Icons.file_copy), onPressed: () => _generateWord([submission]))
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      ),
+              future: submissionsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Center(child: Text('No submissions found.'));
+                }
+                return ListView.builder(
+                  itemCount: snapshot.data!.length,
+                  itemBuilder: (context, index) {
+                    final submission = snapshot.data![index];
+                    return Card(
+                      color: Colors.white,
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      margin: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.blueAccent,
+                          child: Icon(Icons.person, color: Colors.white),
+                        ),
+                        title: Text(
+                          submission['patient_name'] ?? 'Unknown Patient',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          submission['phone_number'] ?? 'Unknown Phone',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                          onPressed: () => _generatePDF([submission]),
+                        ),
+                      ),
+                    );
+
+                  },
+                );
+              },
+            ),
     );
   }
 }
