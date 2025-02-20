@@ -41,12 +41,51 @@ class _HomeScreenState extends State<HomeScreen> {
         doctorId = enteredId;
         doctorName = snapshot.docs.first['name'];
         submissionsFuture = _fetchSubmissions(doctorId!);
+        _showAccountDetailsDialog(snapshot.docs.first.data());
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Invalid ID or Password')),
       );
     }
+  }
+
+  void _showAccountDetailsDialog(Map<String, dynamic> doctor) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Icon(Icons.person, size: 50, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Welcome, ${doctor['name'] ?? 'Unknown'}!'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('UID: ${doctor['uid'] ?? 'N/A'}'),
+            SizedBox(height: 8),
+            Text('Specialization: ${doctor['special_area'] ?? 'N/A'}'),
+            SizedBox(height: 8),
+            Text('Hospital: ${doctor['hospital'] ?? 'N/A'}'),
+            SizedBox(height: 8),
+            Text('Mobile Number: ${doctor['mobile_number'] ?? 'N/A'}'),
+            SizedBox(height: 8),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('Go to Registrations'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<List<Map<String, dynamic>>> _fetchSubmissions(String doctorId) async {
@@ -61,67 +100,120 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _generatePDF(List<Map<String, dynamic>> submissions) async {
     final pdf = pw.Document();
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('Patient Submissions',
-                  style: pw.TextStyle(
-                      fontSize: 20, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 10),
-              for (var submission in submissions)
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text('Name: ${submission['patient_name'] ?? 'Unknown'}'),
-                    pw.Text('DOB: ${submission['dob'] ?? 'N/A'}'),
-                    pw.Text('Email: ${submission['email'] ?? 'N/A'}'),
-                    pw.Text('Phone: ${submission['phone_number'] ?? 'N/A'}'),
-                    pw.Text('Address: ${submission['address'] ?? 'N/A'}'),
-                    pw.Text(
-                        'Emergency Contact: ${submission['emergency_contact'] ?? 'N/A'}'),
-                    pw.Text('Gender: ${submission['gender'] ?? 'N/A'}'),
-                    pw.Text(
-                        'Conditions: ${submission['conditions'].join(', ') ?? 'N/A'}'),
-                    pw.Text(
-                        'Medications: ${submission['medication'] ?? 'N/A'}'),
-                    pw.Text('Surgeries: ${submission['surgeries'] ?? 'N/A'}'),
-                    pw.Text('Allergies: ${submission['allergies'] ?? 'N/A'}'),
-                    pw.Text(
-                        'Symptoms: ${submission['symptoms'].join(', ') ?? 'N/A'}'),
-                    pw.Text('Pain Level: ${submission['pain_level'] ?? 'N/A'}'),
-                    pw.Text('Travel: ${submission['travel'] ?? 'N/A'}'),
-                    pw.Text(
-                        'Contact with Sick Person: ${submission['contact_with_sick_person'] ?? 'N/A'}'),
-                    pw.Text('Smoke: ${submission['smoke'] ?? 'N/A'}'),
-                    pw.Text('Alcohol: ${submission['alcohol'] ?? 'N/A'}'),
-                    pw.Text('Exercise: ${submission['exercise'] ?? 'N/A'}'),
-                    pw.Text('Sleep: ${submission['sleep'] ?? 'N/A'}'),
-                    pw.Text(
-                        'Dietary Preferences: ${submission['dietary_preferences'] ?? 'N/A'}'),
-                    pw.Text(
-                        'Additional Concerns: ${submission['additional_concerns'] ?? 'N/A'}'),
-                    pw.Text(
-                        'Submitted At: ${submission['submitted_at'] != null ? DateFormat('dd/MM/yyyy').format(submission['submitted_at'].toDate()) : 'N/A'}'),
-                    pw.Divider(),
-                  ],
-                )
-            ],
-          );
-        },
-      ),
-    );
+    for (var submission in submissions) {
+      final patientId = submission['patient_id'] ?? 'Unknown';
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Padding(
+              padding: const pw.EdgeInsets.all(16.0),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('Patient Registration Data',
+                      style: pw.TextStyle(
+                          fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 20),
+
+                  // Section 1: Personal Information
+                  pw.Text('1. Personal Information',
+                      style: pw.TextStyle(
+                          fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Patient ID: $patientId'),
+                  pw.Text(
+                      'Full Name: ${submission['patient_name'] ?? 'Unknown'}'),
+                  pw.Text('Date of Birth: ${submission['dob'] ?? 'N/A'}'),
+                  pw.Text('Gender: ${submission['gender'] ?? 'N/A'}'),
+                  pw.Text('Email: ${submission['email'] ?? 'N/A'}'),
+                  pw.Text(
+                      'Phone Number: ${submission['phone_number'] ?? 'N/A'}'),
+                  pw.Text('Address: ${submission['address'] ?? 'N/A'}'),
+                  pw.Text(
+                      'Emergency Contact: ${submission['emergency_contact'] ?? 'N/A'}'),
+
+                  pw.SizedBox(height: 16),
+
+                  // Section 2: Medical History
+                  pw.Text('2. Medical History',
+                      style: pw.TextStyle(
+                          fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                      'Pre-existing Conditions: ${submission['conditions']?.join(', ') ?? 'N/A'}'),
+                  pw.Text(
+                      'Current Medications: ${submission['medication'] ?? 'N/A'}'),
+                  pw.Text(
+                      'Past Surgeries: ${submission['surgeries'] ?? 'N/A'}'),
+                  pw.Text(
+                      'Known Allergies: ${submission['allergies'] ?? 'N/A'}'),
+
+                  pw.SizedBox(height: 16),
+
+                  // Section 3: Symptoms & Current Health Status
+                  pw.Text('3. Symptoms & Current Health Status',
+                      style: pw.TextStyle(
+                          fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                      'Symptoms: ${submission['symptoms']?.join(', ') ?? 'N/A'}'),
+                  pw.Text('Pain Level: ${submission['pain_level'] ?? 'N/A'}'),
+                  pw.Text('Recent Travel: ${submission['travel'] ?? 'N/A'}'),
+                  pw.Text(
+                      'Recent Sick Contact: ${submission['contact_with_sick_person'] ?? 'N/A'}'),
+
+                  pw.SizedBox(height: 16),
+
+                  // Section 4: Lifestyle & Habits
+                  pw.Text('4. Lifestyle & Habits',
+                      style: pw.TextStyle(
+                          fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Smoking: ${submission['smoke'] ?? 'N/A'}'),
+                  pw.Text(
+                      'Alcohol Consumption: ${submission['alcohol'] ?? 'N/A'}'),
+                  pw.Text('Exercise: ${submission['exercise'] ?? 'N/A'}'),
+                  pw.Text('Sleep Duration: ${submission['sleep'] ?? 'N/A'}'),
+                  pw.Text(
+                      'Dietary Preferences: ${submission['dietary_preferences'] ?? 'N/A'}'),
+
+                  pw.SizedBox(height: 16),
+
+                  // Section 5: Additional Information
+                  pw.Text('5. Additional Information',
+                      style: pw.TextStyle(
+                          fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                      'Concerns: ${submission['additional_concerns'] ?? 'N/A'}'),
+                  // pw.Text(
+                  //     'Health Tips Subscription: ${submission['receive_email'] ?? 'N/A'}'),
+
+                  pw.SizedBox(height: 16),
+
+                  pw.Text(
+                    'Submitted on: ${submission['submitted_at'] != null ? DateFormat('yyyy-MM-dd at HH:mm:ss').format(submission['submitted_at'].toDate()) : 'N/A'}',
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    }
 
     final pdfBytes = await pdf.save();
     final blob = html.Blob([Uint8List.fromList(pdfBytes)], 'application/pdf');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    final anchor = html.AnchorElement(href: url)
-      ..setAttribute('download', 'submissions.pdf')
-      ..click();
-    html.Url.revokeObjectUrl(url);
+
+    for (var submission in submissions) {
+      final patientId = submission['patient_id'] ?? 'submissions';
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', '$patientId.pdf')
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    }
   }
 
   @override
@@ -130,7 +222,8 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         centerTitle: true,
         backgroundColor: Colors.lightBlue.shade100,
-        title: Text(doctorId == null ? 'Doctor Login' : 'Submissions for $doctorName'),
+        title: Text(
+            doctorId == null ? 'Doctor Login' : 'Submissions for $doctorName'),
       ),
       body: doctorId == null
           ? Container(
@@ -150,10 +243,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(height: 10),
                   SizedBox(height: 10),
                   TextFieldWidget(
-                      controller: _passwordController,
+                    controller: _passwordController,
                     label: 'Password',
                     hint: 'Enter your password',
-                      ),
+                  ),
                   SizedBox(height: 20),
                   RoundButton(onPressed: _loginDoctor, label: 'Login'),
                 ],
@@ -180,7 +273,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       margin: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       child: ListTile(
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         leading: CircleAvatar(
                           backgroundColor: Colors.blueAccent,
                           child: Icon(Icons.person, color: Colors.white),
@@ -194,12 +288,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: TextStyle(color: Colors.grey[600]),
                         ),
                         trailing: IconButton(
-                          icon: Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                          icon: Icon(Icons.picture_as_pdf,
+                              color: Colors.redAccent),
                           onPressed: () => _generatePDF([submission]),
                         ),
                       ),
                     );
-
                   },
                 );
               },
