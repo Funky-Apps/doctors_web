@@ -223,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
         backgroundColor: Colors.lightBlue.shade100,
         title: Text(
-            doctorId == null ? 'Doctor Login' : 'Submissions for $doctorName'),
+            doctorId == null ? 'Doctor Login' : 'Latest Registrations'),
       ),
       body: doctorId == null
           ? Container(
